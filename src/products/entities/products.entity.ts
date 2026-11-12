@@ -8,8 +8,8 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import type { Relation } from 'typeorm';
-import { Categories } from '../../categories/entities/categories.entity.js';
-import { Users } from '../../users/entities/users.entity.js';
+import { Categories } from '../../categories/entities/categories.entity';
+import { Users } from '../../users/entities/users.entity';
 
 @Entity('products')
 export class Products {
