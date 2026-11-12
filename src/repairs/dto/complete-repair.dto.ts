@@ -24,7 +24,7 @@ export class UsedPartDto {
 }
 
 export class CompleteRepairDto {
-  @ApiProperty({ type: [UsedPartDto] })
+  @ApiProperty({ type:[UsedPartDto] })
   @IsArray()
   @ArrayUnique((p: UsedPartDto) => p.partId)
   @ValidateNested({ each: true })
@@ -32,7 +32,7 @@ export class CompleteRepairDto {
   parts: UsedPartDto[];
 
   // notes: optional, text, max 1000 (CreateRepairDto er moto)
-  @ApiPropertyOptional({ example: 'Screen and battery replaced', maxLength: 1000 })
+  @ApiPropertyOptional({ example:'Screen and battery replaced', maxLength: 1000 })
   @IsOptional()
   @IsString()
   @MaxLength(1000)
