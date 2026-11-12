@@ -56,11 +56,22 @@ export class RepairsService {
 
   // POST /repairs
   async create(dto: CreateRepairDto) {
-    // 1. the claim must exist and be APPROVED
+    // 1. the claim must exist
     const claim = await this.claimsRepo.findOne({ where: { id: dto.claimId } });
     if (!claim) {
       throw new NotFoundException('Claim ' + dto.claimId + ' not found');
     }
+
+    // 2. one claim can have only one repair (checked before the status,
+    //    so a second request gets 409 and not 400)
+    const existing = await this.repairsRepo.findOne({
+      where: { claim: { id: dto.claimId } },
+    });
+    if (existing) {
+      throw new ConflictException('This claim already has a repair');
+    }
+
+    // 3. the claim must be APPROVED
     if (claim.status !== ClaimStatus.APPROVED) {
       throw new BadRequestException(
         'Only an APPROVED claim can get a repair (this one is ' +
@@ -69,18 +80,10 @@ export class RepairsService {
       );
     }
 
-    // 2. one claim can have only one repair
-    const existing = await this.repairsRepo.findOne({
-      where: { claim: { id: dto.claimId } },
-    });
-    if (existing) {
-      throw new ConflictException('This claim already has a repair');
-    }
-
-    // 3. the technician must exist, be active and have the TECHNICIAN role
+    // 4. the technician must exist, be active and have the TECHNICIAN role
     const technician = await this.findTechnician(dto.technicianId);
 
-    // 4. save the repair, then move the claim to IN_REPAIR
+    // 5. save the repair, then move the claim to IN_REPAIR
     const repair = this.repairsRepo.create({
       claim,
       technician,
