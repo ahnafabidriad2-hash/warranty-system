@@ -12,27 +12,19 @@ export class Users {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'varchar',
-     length: 100 })
+  @Column({ type: 'varchar', length: 100 })
   name: string;
 
-  @Column({ type: 'varchar',
-      length: 150,
-      unique: true })
+  @Column({ type: 'varchar', length: 150, unique: true })
   email: string;
 
-  @Column({ type: 'varchar',
-    length: 100,
-    select: false })
+  @Column({ type: 'varchar', length: 100, select: false })
   password: string;
 
-  @Column({ type: 'enum',
-     enum: Role,
-     default: Role.CUSTOMER })
+  @Column({ type: 'enum', enum: Role, default: Role.CUSTOMER })
   role: Role;
 
-  @Column({ type: 'boolean',
-     default: true })
+  @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
   @CreateDateColumn()
