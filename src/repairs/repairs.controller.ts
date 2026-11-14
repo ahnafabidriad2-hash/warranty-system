@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -13,6 +14,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { RepairsService } from './repairs.service';
 import { CreateRepairDto } from './dto/create-repair.dto';
 import { UpdateRepairDto } from './dto/update-repair.dto';
+import { CompleteRepairDto } from './dto/complete-repair.dto';
 import { PaginationDto } from '../common/dto/pagination.dto';
 
 @ApiTags('Repairs')
@@ -36,6 +38,18 @@ export class RepairsController {
   @ApiOperation({ summary: 'Assign a technician to an approved claim' })
   create(@Body() dto: CreateRepairDto) {
     return this.repairsService.create(dto);
+  }
+
+  @Post(':id/complete')
+  // POST default e 201 (notun kichu banano) dey. Eta notun kichu banay na,
+  // ager repair ke shesh kore, tai 200.
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Complete a repair: use parts, reduce stock, resolve the claim' })
+  complete(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CompleteRepairDto,
+  ) {
+    return this.repairsService.complete(id, dto);
   }
 
   @Patch(':id')

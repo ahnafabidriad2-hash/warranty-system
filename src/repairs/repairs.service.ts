@@ -5,12 +5,15 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Repairs } from './entities/repairs.entity';
+import { RepairParts } from './entities/repair-parts.entity';
 import { Claims } from '../claims/entities/claims.entity';
 import { Users } from '../users/entities/users.entity';
+import { Parts } from '../parts/entities/parts.entity';
 import { CreateRepairDto } from './dto/create-repair.dto';
 import { UpdateRepairDto } from './dto/update-repair.dto';
+import { CompleteRepairDto } from './dto/complete-repair.dto';
 import { PaginationDto, paginate } from '../common/dto/pagination.dto';
 import { ClaimStatus } from '../common/enums/claim-status.enum';
 import { RepairStatus } from '../common/enums/repair-status.enum';
@@ -25,6 +28,9 @@ export class RepairsService {
     private readonly claimsRepo: Repository<Claims>,
     @InjectRepository(Users)
     private readonly usersRepo: Repository<Users>,
+    // DataSource holo pura database connection. Transaction shuru korte eta lage.
+    // TypeOrmModule nijei eta dey, forFeature e dite hoy na.
+    private readonly dataSource: DataSource,
   ) {}
 
   // GET /repairs?page=1&limit=10
@@ -62,8 +68,7 @@ export class RepairsService {
       throw new NotFoundException('Claim ' + dto.claimId + ' not found');
     }
 
-    // 2. one claim can have only one repair (checked before the status,
-    //    so a second request gets 409 and not 400)
+    // 2. one claim can have only one repair (before the status check, so 409)
     const existing = await this.repairsRepo.findOne({
       where: { claim: { id: dto.claimId } },
     });
@@ -117,6 +122,83 @@ export class RepairsService {
     }
 
     await this.repairsRepo.save(repair);
+    return this.findOne(id);
+  }
+
+  // POST /repairs/:id/complete  (THE TRANSACTION)
+  async complete(id: string, dto: CompleteRepairDto) {
+    // dataSource.transaction er bhitorer shob kaj ekta packet.
+    // Bhitore kothao throw hole MySQL shob change ferot dey (rollback).
+    // Shob shesh hole tobei save hoy (commit).
+    await this.dataSource.transaction(async (manager) => {
+      // Bhitore this.repairsRepo na, shudhu "manager" use korte hobe.
+      // manager diye korle tobei kaj ta transaction er bhitore pore.
+
+      // 1. repair ache?
+      const repair = await manager.findOne(Repairs, {
+        where: { id },
+        relations: { claim: true },
+      });
+      if (!repair) {
+        throw new NotFoundException('Repair ' + id + ' not found');
+      }
+
+      // 2. already complete?
+      if (repair.status === RepairStatus.COMPLETED) {
+        throw new BadRequestException('This repair is already completed');
+      }
+
+      // 3. claim IN_REPAIR e thakte hobe
+      if (repair.claim.status !== ClaimStatus.IN_REPAIR) {
+        throw new BadRequestException(
+          'The claim must be IN_REPAIR (this one is ' + repair.claim.status + ')',
+        );
+      }
+
+      // 4. protiti part: ache kina, stock ache kina, stock komao, usage save
+      for (const item of dto.parts) {
+        const part = await manager.findOne(Parts, { where: { id: item.partId } });
+        if (!part) {
+          throw new NotFoundException('Part ' + item.partId + ' not found');
+        }
+        if (part.stock < item.quantity) {
+          // ei throw e ROLLBACK hoy: ager part er stock kome thakle o ferot ashe
+          throw new BadRequestException(
+            'Not enough stock for ' +
+              part.name +
+              ' (have ' +
+              part.stock +
+              ', need ' +
+              item.quantity +
+              ')',
+          );
+        }
+
+        part.stock = part.stock - item.quantity;
+        await manager.save(part);
+
+        const used = manager.create(RepairParts, {
+          repair,
+          part,
+          quantity: item.quantity,
+        });
+        await manager.save(used);
+      }
+
+      // 5. repair COMPLETED
+      repair.status = RepairStatus.COMPLETED;
+      repair.completedAt = new Date();
+      if (dto.notes !== undefined) {
+        repair.notes = dto.notes;
+      }
+      await manager.save(repair);
+
+      // 6. claim RESOLVED
+      repair.claim.status = ClaimStatus.RESOLVED;
+      await manager.save(repair.claim);
+    });
+
+    // transaction shesh (commit hoye geche), ekhon parts shoho ferot dao
     return this.findOne(id);
   }
 
