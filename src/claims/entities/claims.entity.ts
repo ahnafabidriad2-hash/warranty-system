@@ -19,13 +19,10 @@ export class Claims {
   @Column({ type: 'text' })
   issueDescription: string;
 
-  @Column({ type: 'enum',
-    enum: ClaimStatus,
-    default: ClaimStatus.PENDING })
-    status: ClaimStatus;
+  @Column({ type: 'enum', enum: ClaimStatus, default: ClaimStatus.PENDING })
+  status: ClaimStatus;
 
-  @Column({ type: 'text',
-    nullable: true })
+  @Column({ type: 'text', nullable: true })
   rejectionReason: string | null;
 
   @ManyToOne(() => Warranties, {

@@ -13,13 +13,10 @@ export class Categories {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'varchar',
-     length: 100,
-     unique: true })
+  @Column({ type: 'varchar', length: 100, unique: true })
   name: string;
 
-  @Column({ type: 'text',
-     nullable: true })
+  @Column({ type: 'text', nullable: true })
   description: string | null;
 
   @OneToMany(() => Products, (product) => product.category)
