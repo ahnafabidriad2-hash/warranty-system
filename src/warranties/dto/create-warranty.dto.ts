@@ -18,10 +18,6 @@ export class CreateWarrantyDto {
   @IsDateString()
   purchaseDate: string;
 
-  @ApiProperty({ example: '2027-11-15', format: 'date' })
-  @IsDateString()
-  expiryDate: string;
-
   @ApiProperty({ example: '88888888-8888-4888-8888-888888888888' })
   @IsUUID()
   productId: string;

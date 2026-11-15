@@ -50,3 +50,11 @@ export class WarrantyListResponseDto {
   @ApiProperty({ type: WarrantyListMetaDto })
   meta: WarrantyListMetaDto;
 }
+
+export class WarrantyValidityResponseDto {
+  @ApiProperty({ example: true })
+  isValid: boolean;
+
+  @ApiProperty({ example: '2027-11-15', format: 'date' })
+  expiryDate: string;
+}
