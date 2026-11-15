@@ -26,6 +26,9 @@ export class Warranties {
   @Column({ type: 'date' })
   expiryDate: string;
 
+  @Column({ type: 'boolean', default: true })
+  isActive: boolean;
+
   @ManyToOne(() => Products, {
     nullable: false,
     onDelete: 'RESTRICT',

@@ -10,9 +10,19 @@ import {
   Put,
   Query,
 } from '@nestjs/common';
-import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  ApiOperation,
+  ApiParam,
+  ApiQuery,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { PaginationDto } from '../common/dto/pagination.dto';
 import { CreateProductDto } from './dto/create-product.dto';
+import {
+  ProductListResponseDto,
+  ProductResponseDto,
+} from './dto/product-response.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductsService } from './products.service';
 
@@ -23,14 +33,29 @@ export class ProductsController {
 
   @Post()
   @ApiOperation({ summary: 'Create a product' })
-  @ApiResponse({ status: 201, description: 'Product created' })
+  @ApiResponse({
+    status: 201,
+    description: 'Product created',
+    type: ProductResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid input or seller is not a seller',
+  })
+  @ApiResponse({ status: 404, description: 'Category or seller not found' })
   create(@Body() dto: CreateProductDto) {
     return this.productsService.create(dto);
   }
 
   @Get()
   @ApiOperation({ summary: 'List active products' })
-  @ApiResponse({ status: 200, description: 'Paginated active products' })
+  @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
+  @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated active products',
+    type: ProductListResponseDto,
+  })
   findAll(@Query() pagination: PaginationDto) {
     return this.productsService.findAll(pagination);
   }
@@ -38,7 +63,11 @@ export class ProductsController {
   @Get(':id')
   @ApiOperation({ summary: 'Get a product, including inactive products' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  @ApiResponse({ status: 200, description: 'Product details' })
+  @ApiResponse({
+    status: 200,
+    description: 'Product details',
+    type: ProductResponseDto,
+  })
   @ApiResponse({ status: 400, description: 'The id is not a valid UUID' })
   @ApiResponse({ status: 404, description: 'Product not found' })
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {
@@ -48,7 +77,11 @@ export class ProductsController {
   @Put(':id')
   @ApiOperation({ summary: 'Replace a product' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  @ApiResponse({ status: 200, description: 'Product replaced' })
+  @ApiResponse({
+    status: 200,
+    description: 'Product replaced',
+    type: ProductResponseDto,
+  })
   @ApiResponse({ status: 400, description: 'Invalid input or UUID' })
   @ApiResponse({
     status: 404,
@@ -64,7 +97,11 @@ export class ProductsController {
   @Patch(':id')
   @ApiOperation({ summary: 'Partially update a product' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  @ApiResponse({ status: 200, description: 'Product updated' })
+  @ApiResponse({
+    status: 200,
+    description: 'Product updated',
+    type: ProductResponseDto,
+  })
   @ApiResponse({ status: 400, description: 'Invalid input or UUID' })
   @ApiResponse({
     status: 404,
@@ -80,7 +117,11 @@ export class ProductsController {
   @Delete(':id')
   @ApiOperation({ summary: 'Deactivate a product (soft delete)' })
   @ApiParam({ name: 'id', format: 'uuid' })
-  @ApiResponse({ status: 200, description: 'Product deactivated' })
+  @ApiResponse({
+    status: 200,
+    description: 'Product deactivated',
+    type: ProductResponseDto,
+  })
   @ApiResponse({ status: 400, description: 'The id is not a valid UUID' })
   @ApiResponse({ status: 404, description: 'Product not found' })
   remove(@Param('id', new ParseUUIDPipe()) id: string) {
