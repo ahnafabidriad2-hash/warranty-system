@@ -7,6 +7,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, Repository } from 'typeorm';
 import { PaginationDto, paginate } from '../common/dto/pagination.dto';
+import { Role } from '../common/enums/role.enum';
 import { Products } from '../products/entities/products.entity';
 import { Users } from '../users/entities/users.entity';
 import { CreateWarrantyDto } from './dto/create-warranty.dto';
@@ -27,15 +28,18 @@ export class WarrantiesService {
   async create(dto: CreateWarrantyDto): Promise<Warranties> {
     const [product, customer, seller] = await Promise.all([
       this.findProduct(dto.productId),
-      this.findUser(dto.customerId),
-      this.findUser(dto.sellerId),
+      this.findCustomer(dto.customerId),
+      this.findSeller(dto.sellerId),
     ]);
 
     return this.save(
       this.warrantiesRepo.create({
         serialNumber: dto.serialNumber,
         purchaseDate: dto.purchaseDate,
-        expiryDate: dto.expiryDate,
+        expiryDate: this.calculateExpiryDate(
+          dto.purchaseDate,
+          product.warrantyMonths,
+        ),
         product,
         customer,
         seller,
@@ -55,6 +59,30 @@ export class WarrantiesService {
     return paginate(warranties, total, pagination);
   }
 
+  async findForCustomer(customerId: string, pagination: PaginationDto) {
+    await this.findCustomer(customerId);
+    const [warranties, total] = await this.warrantiesRepo.findAndCount({
+      where: { customer: { id: customerId }, isActive: true },
+      relations: { product: true, customer: true, seller: true },
+      order: { createdAt: 'DESC' },
+      skip: (pagination.page - 1) * pagination.limit,
+      take: pagination.limit,
+    });
+
+    return paginate(warranties, total, pagination);
+  }
+
+  async checkValidity(id: string) {
+    const warranty = await this.findOne(id);
+
+    return {
+      isValid:
+        warranty.isActive &&
+        warranty.expiryDate >= new Date().toISOString().slice(0, 10),
+      expiryDate: warranty.expiryDate,
+    };
+  }
+
   async findOne(id: string): Promise<Warranties> {
     const warranty = await this.warrantiesRepo.findOne({
       where: { id },
@@ -72,13 +100,16 @@ export class WarrantiesService {
     const [warranty, product, customer, seller] = await Promise.all([
       this.findOne(id),
       this.findProduct(dto.productId),
-      this.findUser(dto.customerId),
-      this.findUser(dto.sellerId),
+      this.findCustomer(dto.customerId),
+      this.findSeller(dto.sellerId),
     ]);
 
     warranty.serialNumber = dto.serialNumber;
     warranty.purchaseDate = dto.purchaseDate;
-    warranty.expiryDate = dto.expiryDate;
+    warranty.expiryDate = this.calculateExpiryDate(
+      dto.purchaseDate,
+      product.warrantyMonths,
+    );
     warranty.product = product;
     warranty.customer = customer;
     warranty.seller = seller;
@@ -88,21 +119,30 @@ export class WarrantiesService {
 
   async update(id: string, dto: UpdateWarrantyDto): Promise<Warranties> {
     const warranty = await this.findOne(id);
+    let recalculateExpiry = false;
 
     if (dto.productId !== undefined) {
       warranty.product = await this.findProduct(dto.productId);
+      recalculateExpiry = true;
     }
     if (dto.customerId !== undefined) {
-      warranty.customer = await this.findUser(dto.customerId);
+      warranty.customer = await this.findCustomer(dto.customerId);
     }
     if (dto.sellerId !== undefined) {
-      warranty.seller = await this.findUser(dto.sellerId);
+      warranty.seller = await this.findSeller(dto.sellerId);
     }
     if (dto.serialNumber !== undefined)
       warranty.serialNumber = dto.serialNumber;
-    if (dto.purchaseDate !== undefined)
+    if (dto.purchaseDate !== undefined) {
       warranty.purchaseDate = dto.purchaseDate;
-    if (dto.expiryDate !== undefined) warranty.expiryDate = dto.expiryDate;
+      recalculateExpiry = true;
+    }
+    if (recalculateExpiry) {
+      warranty.expiryDate = this.calculateExpiryDate(
+        warranty.purchaseDate,
+        warranty.product.warrantyMonths,
+      );
+    }
 
     return this.save(warranty);
   }
@@ -132,6 +172,32 @@ export class WarrantiesService {
       throw new NotFoundException(`User ${id} not found`);
     }
     return user;
+  }
+
+  private async findCustomer(id: string): Promise<Users> {
+    const customer = await this.findUser(id);
+    if (customer.role !== Role.CUSTOMER) {
+      throw new BadRequestException(`User ${id} is not a customer`);
+    }
+    return customer;
+  }
+
+  private async findSeller(id: string): Promise<Users> {
+    const seller = await this.findUser(id);
+    if (seller.role !== Role.SELLER) {
+      throw new BadRequestException(`User ${id} is not a seller`);
+    }
+    return seller;
+  }
+
+  private calculateExpiryDate(purchaseDate: string, warrantyMonths: number) {
+    const [year, month, day] = purchaseDate.slice(0, 10).split('-').map(Number);
+    const expiry = new Date(Date.UTC(year, month - 1 + warrantyMonths, 1));
+    const lastDayOfMonth = new Date(
+      Date.UTC(expiry.getUTCFullYear(), expiry.getUTCMonth() + 1, 0),
+    ).getUTCDate();
+    expiry.setUTCDate(Math.min(day, lastDayOfMonth));
+    return expiry.toISOString().slice(0, 10);
   }
 
   private async save(warranty: Warranties): Promise<Warranties> {
