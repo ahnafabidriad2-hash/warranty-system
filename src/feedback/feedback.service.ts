@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -14,6 +15,7 @@ import { UpdateFeedbackDto } from './dto/update-feedback.dto';
 import { PaginationDto, paginate } from '../common/dto/pagination.dto';
 import { RepairStatus } from '../common/enums/repair-status.enum';
 import { Role } from '../common/enums/role.enum';
+import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
 
 @Injectable()
 export class FeedbackService {
@@ -26,7 +28,7 @@ export class FeedbackService {
     private readonly usersRepo: Repository<Users>,
   ) {}
 
-  // GET /feedback?page=1&limit=10
+  // GET /feedback?page=1&limit=10 (Admin)
   async findAll(query: PaginationDto) {
     const [items, total] = await this.feedbackRepo.findAndCount({
       relations: { repair: true, customer: true },
@@ -38,7 +40,8 @@ export class FeedbackService {
   }
 
   // GET /feedback/:id
-  async findOne(id: string) {
+  // user deya hole: customer shudhu nijer feedback dekhte pare
+  async findOne(id: string, user?: AuthenticatedUser) {
     const feedback = await this.feedbackRepo.findOne({
       where: { id },
       relations: { repair: true, customer: true },
@@ -46,13 +49,15 @@ export class FeedbackService {
     if (!feedback) {
       throw new NotFoundException('Feedback ' + id + ' not found');
     }
+    if (user && user.role === Role.CUSTOMER && feedback.customer.id !== user.id) {
+      throw new ForbiddenException('This is not your feedback');
+    }
     return feedback;
   }
 
-  // POST /feedback
-  async create(dto: CreateFeedbackDto) {
-    // 1. repair ache? shathe claim -> warranty -> customer o ano,
-    //    jate pore malik check kora jay (3 dhap er relation ek shathe)
+  // POST /feedback (Customer)
+  async create(dto: CreateFeedbackDto, user: AuthenticatedUser) {
+    // 1. repair ache? shathe claim -> warranty -> customer o ano (malik check er jonno)
     const repair = await this.repairsRepo.findOne({
       where: { id: dto.repairId },
       relations: { claim: { warranty: { customer: true } } },
@@ -78,22 +83,15 @@ export class FeedbackService {
       );
     }
 
-    // 4. customer ache ar role CUSTOMER?
-    const customer = await this.usersRepo.findOne({
-      where: { id: dto.customerId },
-    });
-    if (!customer) {
-      throw new NotFoundException('User ' + dto.customerId + ' not found');
-    }
-    if (customer.role !== Role.CUSTOMER) {
-      throw new BadRequestException('User ' + dto.customerId + ' is not a customer');
+    // 4. shudhu warranty r malik feedback dite parbe
+    if (repair.claim.warranty.customer.id !== user.id) {
+      throw new ForbiddenException('Only the owner of this warranty can give feedback');
     }
 
-    // 5. shudhu warranty r malik feedback dite parbe
-    if (repair.claim.warranty.customer.id !== customer.id) {
-      throw new BadRequestException(
-        'Only the owner of this warranty can give feedback',
-      );
+    // 5. login kora customer ke database theke ano
+    const customer = await this.usersRepo.findOne({ where: { id: user.id } });
+    if (!customer) {
+      throw new NotFoundException('User ' + user.id + ' not found');
     }
 
     // 6. save
@@ -107,9 +105,9 @@ export class FeedbackService {
     return this.findOne(saved.id);
   }
 
-  // PATCH /feedback/:id
-  async update(id: string, dto: UpdateFeedbackDto) {
-    const feedback = await this.findOne(id);
+  // PATCH /feedback/:id (Customer, own only)
+  async update(id: string, dto: UpdateFeedbackDto, user: AuthenticatedUser) {
+    const feedback = await this.findOne(id, user); // onner hole 403
 
     if (dto.rating !== undefined) {
       feedback.rating = dto.rating;
@@ -122,9 +120,9 @@ export class FeedbackService {
     return this.findOne(id);
   }
 
-  // DELETE /feedback/:id
-  async remove(id: string) {
-    const feedback = await this.findOne(id);
+  // DELETE /feedback/:id (Admin, or the customer who wrote it)
+  async remove(id: string, user: AuthenticatedUser) {
+    const feedback = await this.findOne(id, user);
     await this.feedbackRepo.remove(feedback);
     return { message: 'Feedback ' + id + ' deleted' };
   }

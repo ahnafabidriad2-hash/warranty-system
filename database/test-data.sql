@@ -28,3 +28,8 @@ INSERT IGNORE INTO claims (id, issueDescription, status, warrantyId) VALUES
 INSERT IGNORE INTO parts (id, name, sku, stock, unitPrice) VALUES
 ('44444444-4444-4444-8444-444444444444', 'Screen',  'SCR-001', 5, 2500.00),
 ('55555555-5555-4555-8555-555555555555', 'Battery', 'BAT-001', 1, 1200.00);
+
+
+-- shob test user er password: 123456 (bcrypt hash), jate Swagger e login kora jay
+UPDATE users SET password = '$2b$10$/28FXyuLVVol0wuB9nJHOenFRRIdvnFL6779RSKk7pd0CWHX2KuUG'
+WHERE email IN ('admin@test.com', 'technician@test.com', 'customer@test.com', 'seller@test.com');
