@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -18,6 +19,7 @@ import { PaginationDto, paginate } from '../common/dto/pagination.dto';
 import { ClaimStatus } from '../common/enums/claim-status.enum';
 import { RepairStatus } from '../common/enums/repair-status.enum';
 import { Role } from '../common/enums/role.enum';
+import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
 
 @Injectable()
 export class RepairsService {
@@ -29,7 +31,6 @@ export class RepairsService {
     @InjectRepository(Users)
     private readonly usersRepo: Repository<Users>,
     // DataSource holo pura database connection. Transaction shuru korte eta lage.
-    // TypeOrmModule nijei eta dey, forFeature e dite hoy na.
     private readonly dataSource: DataSource,
   ) {}
 
@@ -60,7 +61,7 @@ export class RepairsService {
     return repair;
   }
 
-  // POST /repairs
+  // POST /repairs (Admin), also called by ClaimsService for PATCH /claims/:id/assign
   async create(dto: CreateRepairDto) {
     // 1. the claim must exist
     const claim = await this.claimsRepo.findOne({ where: { id: dto.claimId } });
@@ -104,8 +105,17 @@ export class RepairsService {
   }
 
   // PATCH /repairs/:id
-  async update(id: string, dto: UpdateRepairDto) {
+  async update(id: string, dto: UpdateRepairDto, user: AuthenticatedUser) {
     const repair = await this.findOne(id);
+
+    // technician shudhu nijer repair bodlate pare
+    if (user.role === Role.TECHNICIAN && repair.technician.id !== user.id) {
+      throw new ForbiddenException('This repair is assigned to another technician');
+    }
+    // technician bodlano shudhu Admin er kaj
+    if (user.role === Role.TECHNICIAN && dto.technicianId) {
+      throw new ForbiddenException('Only an admin can change the technician');
+    }
 
     if (repair.status === RepairStatus.COMPLETED) {
       throw new BadRequestException('A completed repair cannot be changed');
@@ -126,36 +136,39 @@ export class RepairsService {
   }
 
   // POST /repairs/:id/complete  (THE TRANSACTION)
-  async complete(id: string, dto: CompleteRepairDto) {
-    // dataSource.transaction er bhitorer shob kaj ekta packet.
+  async complete(id: string, dto: CompleteRepairDto, user: AuthenticatedUser) {
+    // dataSource.transaction(...) er bhitorer shob kaj ekta packet.
     // Bhitore kothao throw hole MySQL shob change ferot dey (rollback).
-    // Shob shesh hole tobei save hoy (commit).
     await this.dataSource.transaction(async (manager) => {
       // Bhitore this.repairsRepo na, shudhu "manager" use korte hobe.
-      // manager diye korle tobei kaj ta transaction er bhitore pore.
 
       // 1. repair ache?
       const repair = await manager.findOne(Repairs, {
         where: { id },
-        relations: { claim: true },
+        relations: { claim: true, technician: true },
       });
       if (!repair) {
         throw new NotFoundException('Repair ' + id + ' not found');
       }
 
-      // 2. already complete?
+      // 2. shudhu je technician ke assign kora, se-i complete korte pare
+      if (repair.technician.id !== user.id) {
+        throw new ForbiddenException('This repair is assigned to another technician');
+      }
+
+      // 3. already complete?
       if (repair.status === RepairStatus.COMPLETED) {
         throw new BadRequestException('This repair is already completed');
       }
 
-      // 3. claim IN_REPAIR e thakte hobe
+      // 4. claim IN_REPAIR e thakte hobe
       if (repair.claim.status !== ClaimStatus.IN_REPAIR) {
         throw new BadRequestException(
           'The claim must be IN_REPAIR (this one is ' + repair.claim.status + ')',
         );
       }
 
-      // 4. protiti part: ache kina, stock ache kina, stock komao, usage save
+      // 5. protiti part: ache kina, stock ache kina, stock komao, usage save
       for (const item of dto.parts) {
         const part = await manager.findOne(Parts, { where: { id: item.partId } });
         if (!part) {
@@ -185,7 +198,7 @@ export class RepairsService {
         await manager.save(used);
       }
 
-      // 5. repair COMPLETED
+      // 6. repair COMPLETED
       repair.status = RepairStatus.COMPLETED;
       repair.completedAt = new Date();
       if (dto.notes !== undefined) {
@@ -193,7 +206,7 @@ export class RepairsService {
       }
       await manager.save(repair);
 
-      // 6. claim RESOLVED
+      // 7. claim RESOLVED
       repair.claim.status = ClaimStatus.RESOLVED;
       await manager.save(repair.claim);
     });
