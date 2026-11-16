@@ -9,15 +9,23 @@ import {
   Post,
   Put,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiOperation,
   ApiParam,
   ApiQuery,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
+import { Roles } from '../common/decorators/roles.decorator';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { Role } from '../common/enums/role.enum';
 import { CreateWarrantyDto } from './dto/create-warranty.dto';
 import { UpdateWarrantyDto } from './dto/update-warranty.dto';
 import {
@@ -68,9 +76,13 @@ export class WarrantiesController {
     return this.warrantiesService.findAll(pagination);
   }
 
-  @Get('customer/:customerId')
-  @ApiOperation({ summary: 'List active warranties for a customer' })
-  @ApiParam({ name: 'customerId', format: 'uuid' })
+  @Get('customer')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.CUSTOMER)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'List active warranties for the authenticated customer',
+  })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
   @ApiResponse({
@@ -78,16 +90,17 @@ export class WarrantiesController {
     description: 'Paginated active warranties for the customer',
     type: WarrantyListResponseDto,
   })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({
-    status: 400,
-    description: 'The customer id is not a valid UUID',
+    status: 403,
+    description: 'Only customers may access this endpoint',
   })
-  @ApiResponse({ status: 404, description: 'Customer not found' })
+  @ApiResponse({ status: 400, description: 'Invalid pagination parameters' })
   findForCustomer(
-    @Param('customerId', new ParseUUIDPipe()) customerId: string,
+    @CurrentUser() user: AuthenticatedUser,
     @Query() pagination: PaginationDto,
   ) {
-    return this.warrantiesService.findForCustomer(customerId, pagination);
+    return this.warrantiesService.findForCustomer(user.id, pagination);
   }
 
   @Get(':id/validity')
