@@ -33,7 +33,8 @@ export class CreateProductDto {
   @IsUUID()
   categoryId: string;
 
-  @ApiProperty({ example: '77777777-7777-4777-8777-777777777777' })
+  @ApiPropertyOptional({ example: '77777777-7777-4777-8777-777777777777' })
+  @IsOptional()
   @IsUUID()
-  sellerId: string;
+  sellerId?: string;
 }

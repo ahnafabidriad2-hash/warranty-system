@@ -43,7 +43,10 @@ describe('WarrantiesController', () => {
       WarrantiesController.prototype,
       'findForCustomer',
     )?.value as object;
-    const guards = Reflect.getMetadata(GUARDS_METADATA, handler) as unknown[];
+    const guards = Reflect.getMetadata(
+      GUARDS_METADATA,
+      WarrantiesController,
+    ) as unknown[];
 
     expect(guards).toEqual([JwtAuthGuard, RolesGuard]);
     expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual([Role.CUSTOMER]);
