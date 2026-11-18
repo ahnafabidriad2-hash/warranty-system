@@ -8,7 +8,7 @@ import {
 } from 'class-validator';
 
 export class RegisterDto {
-  @ApiProperty({ example: 'Rahim Uddin' })
+  @ApiProperty({ example: 'Rahim Uddin' })  // swagger r box a example hishebe show korbe
   @IsString()
   @IsNotEmpty()
   @MaxLength(100)
