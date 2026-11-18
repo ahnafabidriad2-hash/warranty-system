@@ -36,11 +36,14 @@ import {
 import { WarrantiesService } from './warranties.service';
 
 @ApiTags('Warranties')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('warranties')
 export class WarrantiesController {
   constructor(private readonly warrantiesService: WarrantiesService) {}
 
   @Post()
+  @Roles(Role.SELLER, Role.ADMIN)
   @ApiOperation({ summary: 'Register a warranty' })
   @ApiResponse({
     status: 201,
@@ -64,6 +67,7 @@ export class WarrantiesController {
   }
 
   @Get()
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'List warranties' })
   @ApiQuery({ name: 'page', required: false, type: Number, example: 1 })
   @ApiQuery({ name: 'limit', required: false, type: Number, example: 10 })
@@ -77,9 +81,7 @@ export class WarrantiesController {
   }
 
   @Get('customer')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.CUSTOMER)
-  @ApiBearerAuth()
   @ApiOperation({
     summary: 'List active warranties for the authenticated customer',
   })
@@ -104,6 +106,7 @@ export class WarrantiesController {
   }
 
   @Get(':id/validity')
+  @Roles(Role.ADMIN)
   @ApiOperation({ summary: 'Check whether a warranty is still valid' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiResponse({
@@ -118,6 +121,7 @@ export class WarrantiesController {
   }
 
   @Get(':id')
+  @Roles(Role.ADMIN)
   @ApiOperation({
     summary: 'Get a warranty by id, including inactive warranties',
   })
@@ -134,6 +138,7 @@ export class WarrantiesController {
   }
 
   @Put(':id')
+  @Roles(Role.SELLER, Role.ADMIN)
   @ApiOperation({ summary: 'Replace a warranty' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiResponse({
@@ -161,6 +166,7 @@ export class WarrantiesController {
   }
 
   @Patch(':id')
+  @Roles(Role.SELLER, Role.ADMIN)
   @ApiOperation({ summary: 'Partially update a warranty' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiResponse({
@@ -188,6 +194,7 @@ export class WarrantiesController {
   }
 
   @Delete(':id')
+  @Roles(Role.SELLER, Role.ADMIN)
   @ApiOperation({ summary: 'Deactivate a warranty (soft delete)' })
   @ApiParam({ name: 'id', format: 'uuid' })
   @ApiResponse({
