@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -7,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Categories } from '../categories/entities/categories.entity';
 import { PaginationDto, paginate } from '../common/dto/pagination.dto';
+import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
 import { Role } from '../common/enums/role.enum';
 import { Users } from '../users/entities/users.entity';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -24,9 +26,12 @@ export class ProductsService {
     private readonly usersRepo: Repository<Users>,
   ) {}
 
-  async create(dto: CreateProductDto): Promise<Products> {
+  async create(
+    dto: CreateProductDto,
+    user: AuthenticatedUser,
+  ): Promise<Products> {
     const category = await this.findCategory(dto.categoryId);
-    const seller = await this.findSeller(dto.sellerId);
+    const seller = await this.resolveSeller(dto.sellerId, user);
 
     const product = this.productsRepo.create({
       name: dto.name,
@@ -64,13 +69,23 @@ export class ProductsService {
     return product;
   }
 
-  async update(id: string, dto: UpdateProductDto): Promise<Products> {
+  async update(
+    id: string,
+    dto: UpdateProductDto,
+    user: AuthenticatedUser,
+  ): Promise<Products> {
     const product = await this.findOne(id);
+    this.assertOwnerOrAdmin(product, user);
 
     if (dto.categoryId !== undefined) {
       product.category = await this.findCategory(dto.categoryId);
     }
     if (dto.sellerId !== undefined) {
+      if (user.role !== Role.ADMIN && dto.sellerId !== user.id) {
+        throw new ForbiddenException(
+          'Sellers cannot transfer product ownership',
+        );
+      }
       product.seller = await this.findSeller(dto.sellerId);
     }
     if (dto.name !== undefined) product.name = dto.name;
@@ -82,10 +97,15 @@ export class ProductsService {
     return this.productsRepo.save(product);
   }
 
-  async replace(id: string, dto: CreateProductDto): Promise<Products> {
+  async replace(
+    id: string,
+    dto: CreateProductDto,
+    user: AuthenticatedUser,
+  ): Promise<Products> {
     const product = await this.findOne(id);
+    this.assertOwnerOrAdmin(product, user);
     const category = await this.findCategory(dto.categoryId);
-    const seller = await this.findSeller(dto.sellerId);
+    const seller = await this.resolveSeller(dto.sellerId, user);
 
     product.name = dto.name;
     product.brand = dto.brand ?? null;
@@ -96,8 +116,9 @@ export class ProductsService {
     return this.productsRepo.save(product);
   }
 
-  async remove(id: string): Promise<Products> {
+  async remove(id: string, user: AuthenticatedUser): Promise<Products> {
     const product = await this.findOne(id);
+    this.assertOwnerOrAdmin(product, user);
     if (!product.isActive) return product;
 
     product.isActive = false;
@@ -121,5 +142,39 @@ export class ProductsService {
       throw new BadRequestException(`User ${id} is not a seller`);
     }
     return seller;
+  }
+
+  private async resolveSeller(
+    sellerId: string | undefined,
+    user: AuthenticatedUser,
+  ): Promise<Users> {
+    if (user.role === Role.SELLER) {
+      if (sellerId !== undefined && sellerId !== user.id) {
+        throw new ForbiddenException(
+          'Sellers can only assign products to themselves',
+        );
+      }
+      return this.findSeller(user.id);
+    }
+
+    if (user.role !== Role.ADMIN) {
+      throw new ForbiddenException(
+        'Only sellers or admins can manage products',
+      );
+    }
+
+    if (!sellerId) {
+      throw new BadRequestException('sellerId is required for admins');
+    }
+    return this.findSeller(sellerId);
+  }
+
+  private assertOwnerOrAdmin(product: Products, user: AuthenticatedUser): void {
+    if (
+      user.role !== Role.ADMIN &&
+      (user.role !== Role.SELLER || product.seller.id !== user.id)
+    ) {
+      throw new ForbiddenException('You can only manage your own products');
+    }
   }
 }
