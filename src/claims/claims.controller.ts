@@ -1,16 +1,11 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  ParseUUIDPipe,
-  Patch,
-  Post,
-  Query,
+import {Body,Controller, Delete,Get,Param,ParseUUIDPipe,Patch,Post,Query,Req, UseGuards,
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 import { PaginationDto } from '../common/dto/pagination.dto';
+import { Role } from '../common/enums/role.enum';
 import { ClaimsService } from './claims.service';
 import { AssignTechnicianDto } from './dto/assign-technician.dto';
 import { CreateClaimDto } from './dto/create-claim.dto';
@@ -18,26 +13,35 @@ import { RejectClaimDto } from './dto/reject-claim.dto';
 import { UpdateClaimDto } from './dto/update-claim.dto';
 
 @ApiTags('claims')
-@Controller('claims') // shob URL /claims diye shuru
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, RolesGuard) 
+@Controller('claims') 
 export class ClaimsController {
   constructor(private readonly claimsService: ClaimsService) {}
 
-  @Post() // POST /claims
-  create(@Body() dto: CreateClaimDto) {
-    return this.claimsService.create(dto);
-  }
+@Post()
+@Roles(Role.CUSTOMER)
+create(
+  @Body() dto: CreateClaimDto,
+  @Req() req: { user: { id: string; role: Role } },
+) {
+  return this.claimsService.create(dto, req.user);
+}
 
-  @Get() // GET /claims?page=1&limit=10
+  @Get() 
+  @Roles(Role.ADMIN, Role.CUSTOMER)
   findAll(@Query() query: PaginationDto) {
     return this.claimsService.findAll(query);
   }
 
-  @Get(':id') // GET /claims/<id>
+  @Get(':id') 
+  @Roles(Role.ADMIN, Role.CUSTOMER)
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.claimsService.findOne(id);
   }
 
-  @Patch(':id') // PATCH /claims/<id>
+  @Patch(':id') 
+  @Roles(Role.CUSTOMER)
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateClaimDto,
@@ -45,12 +49,14 @@ export class ClaimsController {
     return this.claimsService.update(id, dto);
   }
 
-  @Patch(':id/approve') // PATCH /claims/<id>/approve
+  @Patch(':id/approve') 
+   @Roles(Role.ADMIN)
   approve(@Param('id', ParseUUIDPipe) id: string) {
     return this.claimsService.approve(id);
   }
 
-  @Patch(':id/reject') // PATCH /claims/<id>/reject
+  @Patch(':id/reject') 
+  @Roles(Role.ADMIN)
   reject(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: RejectClaimDto,
@@ -58,7 +64,8 @@ export class ClaimsController {
     return this.claimsService.reject(id, dto);
   }
 
-  @Patch(':id/assign') // PATCH /claims/<id>/assign
+  @Patch(':id/assign') 
+  @Roles(Role.ADMIN)
   assign(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AssignTechnicianDto,
@@ -66,7 +73,8 @@ export class ClaimsController {
     return this.claimsService.assignTechnician(id, dto);
   }
 
-  @Delete(':id') // DELETE /claims/<id>
+  @Delete(':id')
+  @Roles(Role.ADMIN)
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.claimsService.remove(id);
   }
