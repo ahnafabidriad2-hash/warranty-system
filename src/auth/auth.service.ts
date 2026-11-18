@@ -25,12 +25,12 @@ export class AuthService {
       where: { email: dto.email },
     });
     if (exists) {
-      throw new ConflictException('Email already registered'); // 409
+      throw new ConflictException('Email already registered'); // 409 conflict bujhay
     }
     const user = this.usersRepo.create({
       name: dto.name,
       email: dto.email,
-      password: await bcrypt.hash(dto.password, 10), // 10 = salt rounds
+      password: await bcrypt.hash(dto.password, 10),
       role: Role.CUSTOMER,
     });
     const saved = await this.usersRepo.save(user);
@@ -44,10 +44,10 @@ export class AuthService {
       select: { id: true, email: true, password: true, role: true, isActive: true },
     });
     if (!user || !(await bcrypt.compare(dto.password, user.password))) {
-      throw new UnauthorizedException('Invalid email or password'); // 401
+      throw new UnauthorizedException('Invalid email or password'); // 401 authorized na
     }
     if (!user.isActive) {
-      throw new ForbiddenException('This account is disabled'); // 403
+      throw new ForbiddenException('This account is disabled'); // 403 forbidden, user active na thakle access dite parbe na
     }
     const payload = { sub: user.id, email: user.email, role: user.role };
     return { accessToken: await this.jwtService.signAsync(payload) };
